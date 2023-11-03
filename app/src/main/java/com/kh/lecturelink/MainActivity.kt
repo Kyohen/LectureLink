@@ -44,6 +44,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.PermissionState
 import com.google.accompanist.permissions.PermissionStatus
 import com.google.accompanist.permissions.rememberPermissionState
 import com.kh.lecturelink.ui.theme.LectureLinkTheme
@@ -73,16 +74,17 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun RootView(locManager: LocationManaging, calendarManager: CalendarManager) {
-    var viewModel by MainViewModel(calendarManager, locManager).currentEvents
     val loc by locManager.locationStateFlow.collectAsState()
     val cal by calendarManager.calendarsList.collectAsState()
     val events by calendarManager.calendarEventsList.collectAsState()
 
-    val pState = rememberPermissionState(permission = android.Manifest.permission.ACCESS_FINE_LOCATION)
+    val locPermState = rememberPermissionState(permission = android.Manifest.permission.ACCESS_FINE_LOCATION)
+    val calPermState = rememberPermissionState(permission = android.Manifest.permission.READ_CALENDAR)
 
-    LaunchedEffect(pState.status) {
-        Log.d("ZZZ", pState.status.toString())
-        if(pState.status == PermissionStatus.Granted)
+    LaunchedEffect(locPermState.status) {
+        Log.d("ZZZ", locPermState.status.toString())
+        if(locPermState.status == PermissionStatus.Granted)
+            calPermState.launchPermissionRequest()
             locManager.StartContinousServices()
     }
 
@@ -90,33 +92,57 @@ fun RootView(locManager: LocationManaging, calendarManager: CalendarManager) {
         Log.d("ZZZ", events.toString())
     }
     LaunchedEffect("Key") {
-        pState.launchPermissionRequest()
+        locPermState.launchPermissionRequest()
     }
 
-    Column(verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-        Row {
-            Text("lat: ${loc?.latitude}")
-            Spacer(Modifier.size(10.dp))
-            Text("lon: ${loc?.longitude}")
-        }
-        Button(onClick = {
-            calendarManager.fetchCalendars()
-        }) {
-            Text("Press me")
-        }
-        if(cal.isNotEmpty()) {
-            calendarChoice(calendarChoices = cal, onCalendarSelect = { calendarManager.fetchEvents(it) })
-        }
+    if(locPermState.status != PermissionStatus.Granted || calPermState.status != PermissionStatus.Granted) {
+        enablePermissionsScreen(locationPerm = locPermState, calendarPerm = calPermState)
+    } else {
+        Column(
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+                Row {
+                    Text("lat: ${loc?.latitude}")
+                    Spacer(Modifier.size(10.dp))
+                    Text("lon: ${loc?.longitude}")
+                }
+            Button(onClick = {
+                calendarManager.fetchCalendars()
+            }) {
+                Text("Press me")
+            }
+            if (cal.isNotEmpty()) {
+                calendarChoice(
+                    calendarChoices = cal,
+                    onCalendarSelect = { calendarManager.fetchEvents(it) },
+                    selected = cal.first()
+                )
+            }
 
-        EventsList(list = events)
+            EventsList(list = events)
+        }
     }
 }
 
+@OptIn(ExperimentalPermissionsApi::class)
+@Composable
+fun enablePermissionsScreen(locationPerm: PermissionState, calendarPerm: PermissionState) {
+    Column(verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text("Accept Location and Calendar Permissions to continue")
+        Button(onClick = {
+            locationPerm.launchPermissionRequest()
+            calendarPerm.launchPermissionRequest()
+        }) {
+            Text("Prompt Again")
+        }
+    }
+}
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun calendarChoice(calendarChoices: List<String>, onCalendarSelect: (String) -> Unit) {
+fun calendarChoice(calendarChoices: List<String>, onCalendarSelect: (String) -> Unit, selected: String) {
     var isExpanded by remember { mutableStateOf(false) }
-    var selected by remember { mutableStateOf(calendarChoices.first()) }
+    var selected by remember { mutableStateOf(selected) }
 
     Column {
         OutlinedTextField(

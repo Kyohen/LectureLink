@@ -13,13 +13,14 @@ data class CurrentEvent(
 )
 
 data class UiState(
+    val selectedCalendar: String,
     val currentEvents: List<CurrentEvent>,
     val futureEvents: List<CalEvent>
 )
 class MainViewModel(private val calendarManager: CalendarManager, locationManager: LocationManaging): ViewModel() {
     var location = locationManager.locationStateFlow
 
-    private var _uiState = MutableStateFlow(UiState(listOf(), listOf()))
+    private var _uiState = MutableStateFlow(UiState("", listOf(), listOf()))
     var uiState = _uiState.asStateFlow()
 
     fun checkIn(calEvent: CalEvent) {
