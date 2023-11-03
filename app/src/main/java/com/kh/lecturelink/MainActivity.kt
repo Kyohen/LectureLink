@@ -1,9 +1,12 @@
 package com.kh.lecturelink
 
 import android.content.Context
+import android.content.Intent
 import android.location.Geocoder
 import android.location.LocationManager
+import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -47,6 +50,7 @@ import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionState
 import com.google.accompanist.permissions.PermissionStatus
 import com.google.accompanist.permissions.rememberPermissionState
+import com.google.accompanist.permissions.shouldShowRationale
 import com.kh.lecturelink.ui.theme.LectureLinkTheme
 
 class MainActivity : ComponentActivity() {
@@ -96,7 +100,7 @@ fun RootView(locManager: LocationManaging, calendarManager: CalendarManager) {
     }
 
     if(locPermState.status != PermissionStatus.Granted || calPermState.status != PermissionStatus.Granted) {
-        enablePermissionsScreen(locationPerm = locPermState, calendarPerm = calPermState)
+        EnablePermissionsScreen(locationPerm = locPermState, calendarPerm = calPermState, LocalContext.current)
     } else {
         Column(
             verticalArrangement = Arrangement.Center,
@@ -127,12 +131,18 @@ fun RootView(locManager: LocationManaging, calendarManager: CalendarManager) {
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
-fun enablePermissionsScreen(locationPerm: PermissionState, calendarPerm: PermissionState) {
+fun EnablePermissionsScreen(locationPerm: PermissionState, calendarPerm: PermissionState, context: Context) {
     Column(verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
         Text("Accept Location and Calendar Permissions to continue")
         Button(onClick = {
-            locationPerm.launchPermissionRequest()
-            calendarPerm.launchPermissionRequest()
+            if (!locationPerm.status.shouldShowRationale || !calendarPerm.status.shouldShowRationale) {
+                val i = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                i.data = Uri.parse("package:" + context.packageName)
+                context.startActivity(i)
+            } else {
+                locationPerm.launchPermissionRequest()
+                calendarPerm.launchPermissionRequest()
+            }
         }) {
             Text("Prompt Again")
         }
