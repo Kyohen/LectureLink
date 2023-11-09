@@ -52,6 +52,8 @@ import com.google.accompanist.permissions.PermissionStatus
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.accompanist.permissions.shouldShowRationale
 import com.kh.lecturelink.ui.theme.LectureLinkTheme
+import java.time.LocalDate
+import java.util.Calendar
 
 class MainActivity : ComponentActivity() {
     private lateinit var service: LocationManager
@@ -119,7 +121,14 @@ fun RootView(locManager: LocationManaging, calendarManager: CalendarManager) {
             if (cal.isNotEmpty()) {
                 calendarChoice(
                     calendarChoices = cal,
-                    onCalendarSelect = { calendarManager.fetchEvents(it) },
+                    onCalendarSelect = {
+                        val c = Calendar.getInstance()
+                        c.add(Calendar.DATE, 1)
+                        c.set(Calendar.HOUR_OF_DAY, 0);
+                        c.set(Calendar.MINUTE, 0);
+                        c.set(Calendar.SECOND, 0);
+                        calendarManager.fetchEvents(it, Calendar.getInstance(), c)
+                                       },
                     selected = cal.first()
                 )
             }

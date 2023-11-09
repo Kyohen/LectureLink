@@ -7,6 +7,8 @@ import android.provider.CalendarContract
 import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.util.Calendar
+import java.util.Date
 
 data class CalEvent(
     val title: String,
@@ -30,9 +32,23 @@ class CalendarManager(private val contentResolver: ContentResolver) {
 
         val calUri: Uri = CalendarContract.Calendars.CONTENT_URI
 
-        val selectionEvents = "${CalendarContract.Events.CALENDAR_DISPLAY_NAME} = ?"
+        const val selectionEvents = "(${CalendarContract.Events.CALENDAR_DISPLAY_NAME} = ?)" + " AND (${CalendarContract.Events.DTSTART} >= ?) AND (${CalendarContract.Events.DTEND} <= ?)"
 
     }
+
+//    Calendar startTime = Calendar.getInstance();
+//
+//    startTime.set(Calendar.HOUR_OF_DAY,0);
+//    startTime.set(Calendar.MINUTE,0);
+//    startTime.set(Calendar.SECOND, 0);
+//
+//    Calendar endTime= Calendar.getInstance();
+//    endTime.add(Calendar.DATE, 1);
+//
+//    String selection = "(( " + CalendarContract.Events.DTSTART + " >= " + startTime.getTimeInMillis() + " ) AND ( " + CalendarContract.Events.DTSTART + " <= " + endTime.getTimeInMillis() + " ) AND ( deleted != 1 ))";
+//    Cursor cursor = context.getContentResolver().query(CalendarContract.Events.CONTENT_URI, projection, selection, null, null);
+
+
     fun fetchCalendars() {
         var cur: Cursor? = null
         try {
@@ -58,25 +74,10 @@ class CalendarManager(private val contentResolver: ContentResolver) {
         } finally {
             cur?.let { it.close() }
         }
-
-//        if (cur.count > 0) {
-//            cur.moveToFirst()
-//            val calendarNames = arrayOfNulls<String>(cur.getCount())
-//            // Get calendars id
-//            val calendarIds = IntArray(cur.getCount())
-//            for (i in 0 until cur.getCount()) {
-//                calendarIds[i] = cur.getInt(0)
-//                calendarNames[i] = cur.getString(1)
-//                Log.i("@calendar", "Calendar Name : " + calendarNames[i])
-//                cur.moveToNext()
-//            }
-//        } else {
-//            Log.e("@calendar", "No calendar found in the device")
-//        }
     }
 
-    fun fetchEvents(calendar: String) {
-        val selectArgs = arrayOf(calendar)
+    fun fetchEvents(calendar: String, firstDate: Calendar, endDate: Calendar) {
+        val selectArgs = arrayOf(calendar, firstDate.timeInMillis.toString(), endDate.timeInMillis.toString())
         val cur2 = contentResolver.query(
             CalendarContract.Events.CONTENT_URI,
             arrayOf(CalendarContract.Events.EVENT_LOCATION, CalendarContract.Events.TITLE, CalendarContract.Events.DESCRIPTION, CalendarContract.Events._ID),
