@@ -7,13 +7,16 @@ import android.provider.CalendarContract
 import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.time.Duration
 import java.util.Calendar
 import java.util.Date
 
 data class CalEvent(
     val title: String,
     val location: String,
-    val id: Long
+    val id: Long,
+    val startTime: Long,
+    val endTime: Long
 )
 class CalendarManager(private val contentResolver: ContentResolver) {
     private var _calendarsList = MutableStateFlow<List<String>>(listOf())
@@ -76,11 +79,11 @@ class CalendarManager(private val contentResolver: ContentResolver) {
         }
     }
 
-    fun fetchEvents(calendar: String, firstDate: Calendar, endDate: Calendar) {
+    fun fetchEvents(calendar: String, firstDate: Calendar, endDate: Calendar): List<CalEvent> {
         val selectArgs = arrayOf(calendar, firstDate.timeInMillis.toString(), endDate.timeInMillis.toString())
         val cur2 = contentResolver.query(
             CalendarContract.Events.CONTENT_URI,
-            arrayOf(CalendarContract.Events.EVENT_LOCATION, CalendarContract.Events.TITLE, CalendarContract.Events.DESCRIPTION, CalendarContract.Events._ID),
+            arrayOf(CalendarContract.Events.EVENT_LOCATION, CalendarContract.Events.TITLE, CalendarContract.Events._ID, CalendarContract.Events.DTSTART, CalendarContract.Events.DTEND),
             selectionEvents,
             selectArgs,
             null
@@ -91,20 +94,17 @@ class CalendarManager(private val contentResolver: ContentResolver) {
             // Get the field values
             val location: String = cur2.getString(0)
             val title: String = cur2.getString(1)
-            var desc = ""
-            try {
-                desc = cur2.getString(2)
-            } catch(_: Exception) {
 
-            }
+            val id = cur2.getLong(2)
+            val startTime = cur2.getLong(3)
+            val endTime = cur2.getLong(4)
 
-            val id = cur2.getLong(3)
-
-            events.add(CalEvent(title, location, id))
+            events.add(CalEvent(title, location, id, startTime, endTime))
         }
 
         _events.value = events.toList()
         cur2.close()
+        return events.toList()
     }
 
 }

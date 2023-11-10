@@ -7,6 +7,7 @@ import android.location.LocationManager
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
+import android.service.autofill.OnClickAction
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -70,7 +71,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    RootView(locManager, calendarManager)
+                    RootView(MainViewModel(calendarManager, locManager))
                 }
             }
         }
@@ -79,24 +80,21 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
-fun RootView(locManager: LocationManaging, calendarManager: CalendarManager) {
-    val loc by locManager.locationStateFlow.collectAsState()
-    val cal by calendarManager.calendarsList.collectAsState()
-    val events by calendarManager.calendarEventsList.collectAsState()
+fun RootView(viewModel: MainViewModel) {
+    val loc by viewModel.location.collectAsState()
+    val state = viewModel.state.collectAsState()
 
     val locPermState = rememberPermissionState(permission = android.Manifest.permission.ACCESS_FINE_LOCATION)
     val calPermState = rememberPermissionState(permission = android.Manifest.permission.READ_CALENDAR)
 
     LaunchedEffect(locPermState.status) {
         Log.d("ZZZ", locPermState.status.toString())
-        if(locPermState.status == PermissionStatus.Granted)
+        if(locPermState.status == PermissionStatus.Granted) {
             calPermState.launchPermissionRequest()
-            locManager.StartContinousServices()
+            viewModel.startLocations()
+        }
     }
 
-    LaunchedEffect(events) {
-        Log.d("ZZZ", events.toString())
-    }
     LaunchedEffect("Key") {
         locPermState.launchPermissionRequest()
     }
@@ -114,26 +112,14 @@ fun RootView(locManager: LocationManaging, calendarManager: CalendarManager) {
                     Text("lon: ${loc?.longitude}")
                 }
             Button(onClick = {
-                calendarManager.fetchCalendars()
+
+                viewModel.getCalendarEvents()
             }) {
                 Text("Press me")
             }
-            if (cal.isNotEmpty()) {
-                calendarChoice(
-                    calendarChoices = cal,
-                    onCalendarSelect = {
-                        val c = Calendar.getInstance()
-                        c.add(Calendar.DATE, 1)
-                        c.set(Calendar.HOUR_OF_DAY, 0);
-                        c.set(Calendar.MINUTE, 0);
-                        c.set(Calendar.SECOND, 0);
-                        calendarManager.fetchEvents(it, Calendar.getInstance(), c)
-                                       },
-                    selected = cal.first()
-                )
-            }
 
-            EventsList(list = events)
+            EventsList(list = state.value.currentEvents, viewModel::checkIn)
+            EventsList(list = state.value.futureEvents, onCheckinClicked = {})
         }
     }
 }
@@ -159,7 +145,7 @@ fun EnablePermissionsScreen(locationPerm: PermissionState, calendarPerm: Permiss
 }
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun calendarChoice(calendarChoices: List<String>, onCalendarSelect: (String) -> Unit, selected: String) {
+fun CalendarChoice(calendarChoices: List<String>, onCalendarSelect: (String) -> Unit, selected: String) {
     var isExpanded by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf(selected) }
 
@@ -195,8 +181,8 @@ fun calendarChoice(calendarChoices: List<String>, onCalendarSelect: (String) -> 
 }
 
 @Composable
-fun EventsList(list: List<CalEvent>) {
-    LazyColumn() {
+fun EventsList(list: List<WrappedEvent>, onCheckinClicked: (WrappedEvent) -> Unit) {
+    LazyColumn {
         this.items(list) {
             Column(
                 modifier = Modifier
@@ -204,28 +190,22 @@ fun EventsList(list: List<CalEvent>) {
                     .border(BorderStroke(1.dp, Color.Black))
             ) {
                 Row {
-                    Text(it.id.toString())
-                    Text(it.title)
+                    Text(it.event.id.toString())
+                    Text(it.event.title)
                 }
-                Text(it.location)
+                Text(it.event.location)
+                Button(onClick = { onCheckinClicked(it) }) {
+                    CheckInButtonLabel(state = it.checkedIn)
+                }
+                }
             }
         }
+}
+
+@Composable fun CheckInButtonLabel(state: CheckInState) {
+    when (state) {
+        CheckInState.CantCheckIn -> Text("Not available")
+        CheckInState.CheckedIn -> Text("Checked in")
+        CheckInState.NotCheckedIn -> Text("Check in")
     }
 }
-//@Composable
-//fun RootView(t: theSuperClass) {
-//    val sensorManager: SensorManager = LocalContext.current.getSystemService(
-//        ComponentActivity.SENSOR_SERVICE
-//    ) as SensorManager
-//
-//    val counter by t.n.collectAsState()
-//    Column {
-////        sensorManager.getDefaultSensor(Sensor.)
-//        Button(onClick = t::increment) {
-//            Text(counter.toString())
-//        }
-//    }
-//}
-
-//@Composable
-//fun sensorRow(v: String, )
