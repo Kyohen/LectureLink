@@ -1,16 +1,16 @@
-package com.kh.lecturelink
+package com.kh.lecturelink.ui.views
 
 import android.content.Context
 import android.content.Intent
-import android.location.Geocoder
+import android.location.Location
 import android.location.LocationManager
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
-import android.service.autofill.OnClickAction
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -52,9 +52,12 @@ import com.google.accompanist.permissions.PermissionState
 import com.google.accompanist.permissions.PermissionStatus
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.accompanist.permissions.shouldShowRationale
+import com.kh.lecturelink.CheckInState
+import com.kh.lecturelink.MainViewModel
+import com.kh.lecturelink.Managers.AppLocationManager
+import com.kh.lecturelink.Managers.CalendarManager
+import com.kh.lecturelink.WrappedEvent
 import com.kh.lecturelink.ui.theme.LectureLinkTheme
-import java.time.LocalDate
-import java.util.Calendar
 
 class MainActivity : ComponentActivity() {
     private lateinit var service: LocationManager
@@ -102,25 +105,37 @@ fun RootView(viewModel: MainViewModel) {
     if(locPermState.status != PermissionStatus.Granted || calPermState.status != PermissionStatus.Granted) {
         EnablePermissionsScreen(locationPerm = locPermState, calendarPerm = calPermState, LocalContext.current)
     } else {
-        Column(
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-                Row {
-                    Text("lat: ${loc?.latitude}")
-                    Spacer(Modifier.size(10.dp))
-                    Text("lon: ${loc?.longitude}")
-                }
-            Button(onClick = {
+        MainScreenView(viewModel, loc)
+    }
+    AnimatedVisibility(visible = loc?.latitude == null) {
+        LoadingView("Fetching Location")
+    }
+}
 
-                viewModel.getCalendarEvents()
-            }) {
-                Text("Press me")
-            }
+@Composable
+fun MainScreenView(viewModel: MainViewModel, loc: Location?) {
+    val state = viewModel.state.collectAsState()
 
-            EventsList(list = state.value.currentEvents, viewModel::checkIn)
-            EventsList(list = state.value.futureEvents, onCheckinClicked = {})
+    Column(
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Row {
+            Text("lat: ${loc?.latitude}")
+            Spacer(Modifier.size(10.dp))
+            Text("lon: ${loc?.longitude}")
         }
+        Button(onClick = {
+            viewModel.getCalendarEvents()
+        }) {
+            Text("Press me")
+        }
+
+        AnimatedVisibility(visible = state.value.isLoadingEvents) {
+            LoadingView(text = "Loading Events")
+        }
+        EventsList(list = state.value.currentEvents, viewModel::checkIn)
+        EventsList(list = state.value.futureEvents, onCheckinClicked = {})
     }
 }
 

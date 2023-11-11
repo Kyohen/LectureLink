@@ -1,4 +1,4 @@
-package com.kh.lecturelink
+package com.kh.lecturelink.Managers
 
 import android.content.ContentResolver
 import android.database.Cursor
@@ -7,9 +7,7 @@ import android.provider.CalendarContract
 import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import java.time.Duration
 import java.util.Calendar
-import java.util.Date
 
 data class CalEvent(
     val title: String,
