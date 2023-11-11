@@ -33,7 +33,7 @@ class CalendarManager(private val contentResolver: ContentResolver) {
 
         val calUri: Uri = CalendarContract.Calendars.CONTENT_URI
 
-        const val selectionEvents = "(${CalendarContract.Events.CALENDAR_DISPLAY_NAME} = ?)" + " AND (${CalendarContract.Events.DTSTART} >= ?) AND (${CalendarContract.Events.DTEND} <= ?)"
+        const val selectionEvents = "(${CalendarContract.Events.CALENDAR_DISPLAY_NAME} = ?) AND (${CalendarContract.Events.DTSTART} >= ?) AND (${CalendarContract.Events.DTSTART} <= ?)"
 
     }
 
@@ -71,7 +71,7 @@ class CalendarManager(private val contentResolver: ContentResolver) {
             arrayOf(CalendarContract.Events.EVENT_LOCATION, CalendarContract.Events.TITLE, CalendarContract.Events._ID, CalendarContract.Events.DTSTART, CalendarContract.Events.DTEND),
             selectionEvents,
             selectArgs,
-            null
+            "${CalendarContract.Events.DTSTART} ASC"
         ) as Cursor
 
         val events = mutableListOf<CalEvent>()

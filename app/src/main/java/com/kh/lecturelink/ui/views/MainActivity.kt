@@ -160,13 +160,13 @@ fun CurrentAndUpcomingEventsView(currentEvents: List<WrappedEvent>, upcomingEven
         Column(Modifier.fillMaxSize().padding(it), horizontalAlignment = Alignment.CenterHorizontally) {
             Text("Current Events", fontSize = 25.sp, modifier = Modifier.align(Alignment.Start).padding(6.dp))
             Divider(Modifier.padding(bottom = 16.dp))
-            EventsListView(list = currentEvents, onCheckIn) {
+            EventsListView(list = currentEvents, onCheckIn, titleLines = 1) {
                 NoEventsView("You have no current events")
             }
 
             Text("Upcoming Events", fontSize = 25.sp, modifier = Modifier.align(Alignment.Start).padding(6.dp))
             Divider(Modifier.padding(bottom = 16.dp))
-            EventsListView(list = upcomingEvents, onCheckInClicked = {}) {
+            EventsListView(list = upcomingEvents, onCheckInClicked = {}, titleLines = 2) {
                 NoEventsView("You have no upcoming events")
             }
         }

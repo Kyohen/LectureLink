@@ -7,15 +7,15 @@ import com.kh.lecturelink.Managers.CalEvent
 import com.kh.lecturelink.Managers.CalendarManager
 import com.kh.lecturelink.Managers.LocationManaging
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted.Companion.Eagerly
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.text.DateFormat
 import java.util.Calendar
+import java.util.TimeZone
+
 sealed class CheckInState {
     object CheckedIn: CheckInState()
     object CantCheckIn: CheckInState()
@@ -23,6 +23,8 @@ sealed class CheckInState {
 }
 data class WrappedEvent(
     val checkedIn: CheckInState,
+    val startTime: String,
+    val endTime: String,
     val event: CalEvent
 )
 
@@ -62,30 +64,42 @@ class MainViewModel(private val calendarManager: CalendarManager, private val lo
     fun onResume() {
         getCalendarEvents()
     }
-    fun getCalendarEvents() {
+
+    private fun getCalendarEvents() {
         //TODO: separate current Events and future by dates and durations, fetch CheckInStatus
         handleEvent(Action.loadingEvents)
         viewModelScope.launch {
             val c = Calendar.getInstance()
+            c.timeZone = TimeZone.getTimeZone("UTC")
+            c.add(Calendar.DATE, 10)
+            c.set(Calendar.HOUR_OF_DAY, 0)
+            c.set(Calendar.MINUTE, 0)
+            c.set(Calendar.SECOND, 0)
+
             val currentTime = Calendar.getInstance()
-            c.add(Calendar.DATE, 20)
-            c.set(Calendar.HOUR_OF_DAY, 0);
-            c.set(Calendar.MINUTE, 0);
-            c.set(Calendar.SECOND, 0);
+            currentTime.timeZone = TimeZone.getTimeZone("UTC")
+            currentTime.add(Calendar.MINUTE, -15)
+
             val events = calendarManager.fetchEvents("Calendar", currentTime, c)
 
             //cases: current time after startTime - 15mins && currentTime is before end time
             val (current, future) = events.partition {
-                currentTime.timeInMillis >= it.startTime + (15 * 60 * 1000) && currentTime.timeInMillis <= it.endTime
+                currentTime.timeInMillis >= it.startTime - (15 * 60 * 1000) && currentTime.timeInMillis <= it.endTime
             }
 
             //Check events for check in status
+            val timeFormatter = DateFormat.getTimeInstance(DateFormat.SHORT)
+
             val futureWrapped = future.map {
-                WrappedEvent(CheckInState.CantCheckIn, it)
+                val start = timeFormatter.format(it.startTime)
+                val end = timeFormatter.format(it.endTime)
+                WrappedEvent(CheckInState.CantCheckIn, start, end, it)
             }
 
             val currentWrapped = current.map {
-                WrappedEvent(CheckInState.NotCheckedIn, it)
+                val start = timeFormatter.format(it.startTime)
+                val end = timeFormatter.format(it.endTime)
+                WrappedEvent(CheckInState.NotCheckedIn, start, end, it)
             }
             handleEvent(Action.EventsCalculated(currentWrapped, futureWrapped))
         }
