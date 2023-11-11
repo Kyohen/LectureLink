@@ -37,19 +37,6 @@ class CalendarManager(private val contentResolver: ContentResolver) {
 
     }
 
-//    Calendar startTime = Calendar.getInstance();
-//
-//    startTime.set(Calendar.HOUR_OF_DAY,0);
-//    startTime.set(Calendar.MINUTE,0);
-//    startTime.set(Calendar.SECOND, 0);
-//
-//    Calendar endTime= Calendar.getInstance();
-//    endTime.add(Calendar.DATE, 1);
-//
-//    String selection = "(( " + CalendarContract.Events.DTSTART + " >= " + startTime.getTimeInMillis() + " ) AND ( " + CalendarContract.Events.DTSTART + " <= " + endTime.getTimeInMillis() + " ) AND ( deleted != 1 ))";
-//    Cursor cursor = context.getContentResolver().query(CalendarContract.Events.CONTENT_URI, projection, selection, null, null);
-
-
     fun fetchCalendars() {
         var cur: Cursor? = null
         try {

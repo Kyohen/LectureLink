@@ -16,25 +16,25 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowDropDown
 import androidx.compose.material3.Button
+import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -46,13 +46,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionState
 import com.google.accompanist.permissions.PermissionStatus
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.accompanist.permissions.shouldShowRationale
-import com.kh.lecturelink.CheckInState
 import com.kh.lecturelink.MainViewModel
 import com.kh.lecturelink.Managers.AppLocationManager
 import com.kh.lecturelink.Managers.CalendarManager
@@ -115,27 +117,59 @@ fun RootView(viewModel: MainViewModel) {
 @Composable
 fun MainScreenView(viewModel: MainViewModel, loc: Location?) {
     val state = viewModel.state.collectAsState()
+    val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsState()
+
+    LaunchedEffect(lifecycle, loc) {
+        when (lifecycle) {
+            Lifecycle.State.RESUMED -> {
+                loc?.latitude?.let {
+                    viewModel.onResume()
+                }
+            }
+            else -> {
+
+            }
+        }
+    }
 
     Column(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Row {
-            Text("lat: ${loc?.latitude}")
-            Spacer(Modifier.size(10.dp))
-            Text("lon: ${loc?.longitude}")
-        }
-        Button(onClick = {
-            viewModel.getCalendarEvents()
-        }) {
-            Text("Press me")
-        }
-
         AnimatedVisibility(visible = state.value.isLoadingEvents) {
             LoadingView(text = "Loading Events")
         }
-        EventsList(list = state.value.currentEvents, viewModel::checkIn)
-        EventsList(list = state.value.futureEvents, onCheckinClicked = {})
+        CurrentAndUpcomingEventsView(currentEvents = state.value.currentEvents, upcomingEvents = state.value.futureEvents, onCheckIn = viewModel::checkIn)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CurrentAndUpcomingEventsView(currentEvents: List<WrappedEvent>, upcomingEvents: List<WrappedEvent>, onCheckIn: (WrappedEvent) -> Unit) {
+    Scaffold(topBar = {
+        TopAppBar(
+            colors = TopAppBarDefaults.smallTopAppBarColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                titleContentColor = MaterialTheme.colorScheme.primary,
+            ),
+            title = {
+                Text("Events")
+            }
+        )
+    }) {
+        Column(Modifier.fillMaxSize().padding(it), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("Current Events", fontSize = 25.sp, modifier = Modifier.align(Alignment.Start).padding(6.dp))
+            Divider(Modifier.padding(bottom = 16.dp))
+            EventsListView(list = currentEvents, onCheckIn) {
+                NoEventsView("You have no current events")
+            }
+
+            Text("Upcoming Events", fontSize = 25.sp, modifier = Modifier.align(Alignment.Start).padding(6.dp))
+            Divider(Modifier.padding(bottom = 16.dp))
+            EventsListView(list = upcomingEvents, onCheckInClicked = {}) {
+                NoEventsView("You have no upcoming events")
+            }
+        }
     }
 }
 
@@ -192,35 +226,5 @@ fun CalendarChoice(calendarChoices: List<String>, onCalendarSelect: (String) -> 
                 }, modifier = Modifier.border(BorderStroke(4.dp, Color.Black)))
             }
         }
-    }
-}
-
-@Composable
-fun EventsList(list: List<WrappedEvent>, onCheckinClicked: (WrappedEvent) -> Unit) {
-    LazyColumn {
-        this.items(list) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(BorderStroke(1.dp, Color.Black))
-            ) {
-                Row {
-                    Text(it.event.id.toString())
-                    Text(it.event.title)
-                }
-                Text(it.event.location)
-                Button(onClick = { onCheckinClicked(it) }) {
-                    CheckInButtonLabel(state = it.checkedIn)
-                }
-                }
-            }
-        }
-}
-
-@Composable fun CheckInButtonLabel(state: CheckInState) {
-    when (state) {
-        CheckInState.CantCheckIn -> Text("Not available")
-        CheckInState.CheckedIn -> Text("Checked in")
-        CheckInState.NotCheckedIn -> Text("Check in")
     }
 }

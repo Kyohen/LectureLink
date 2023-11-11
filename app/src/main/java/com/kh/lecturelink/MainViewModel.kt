@@ -47,7 +47,7 @@ class MainViewModel(private val calendarManager: CalendarManager, private val lo
     private fun reduceState(currentState: UiState, action: Action): UiState {
         Log.d("HandleEvent", "$action")
         return when (action) {
-            is Action.CheckInEvent -> TODO()
+            is Action.CheckedInEvent -> TODO()
             is Action.EventsCalculated -> currentState.copy(currentEvents = action.currentEvents, futureEvents = action.futureEvents, isLoadingEvents = false)
             is Action.LocationUpdate -> TODO()
             is Action.loadingEvents -> currentState.copy(isLoadingEvents = true)
@@ -59,13 +59,16 @@ class MainViewModel(private val calendarManager: CalendarManager, private val lo
         throw NotImplementedError()
     }
 
+    fun onResume() {
+        getCalendarEvents()
+    }
     fun getCalendarEvents() {
         //TODO: separate current Events and future by dates and durations, fetch CheckInStatus
         handleEvent(Action.loadingEvents)
         viewModelScope.launch {
             val c = Calendar.getInstance()
             val currentTime = Calendar.getInstance()
-            c.add(Calendar.DATE, 1)
+            c.add(Calendar.DATE, 20)
             c.set(Calendar.HOUR_OF_DAY, 0);
             c.set(Calendar.MINUTE, 0);
             c.set(Calendar.SECOND, 0);
