@@ -1,5 +1,6 @@
 package com.kh.lecturelink
 
+import android.location.Location
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -7,6 +8,7 @@ import com.kh.lecturelink.Managers.CalEvent
 import com.kh.lecturelink.Managers.CalendarManager
 import com.kh.lecturelink.Managers.CheckInManager
 import com.kh.lecturelink.Managers.LocationManaging
+import com.kh.lecturelink.Services.LocationMappingService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -31,6 +33,8 @@ data class WrappedEvent(
     val checkedIn: CheckInState,
     val startTime: String,
     val endTime: String,
+    val location: Location?,
+    val isInLocation: Boolean,
     val event: CalEvent
 )
 
@@ -39,10 +43,11 @@ data class UiState(
     val futureEvents: List<WrappedEvent>,
     val isLoadingEvents: Boolean,
     val lastFetchInMinutes: String,
-    val timerToggled: Boolean
+    val timerToggled: Boolean,
+    val currentLocation: Location?
 ) {
     companion object {
-        fun defaultUiState(): UiState = UiState(listOf(), listOf(), false, "now", false)
+        fun defaultUiState(): UiState = UiState(listOf(), listOf(), false, "now", false, null)
     }
 }
 
@@ -71,15 +76,20 @@ class MainViewModel(
         }
     }
 
-    var location = locationManager.locationStateFlow
-    //TODO: Make this a state update from within manager
+    var location = viewModelScope.launch {
+        locationManager.locationStateFlow.collect {
+            it?.let { handleEvent(Action.LocationUpdate(it)) }
+        }
+    }
 
     val state = events.receiveAsFlow()
         .runningFold(UiState.defaultUiState(), ::reduceState)
         .stateIn(viewModelScope, Eagerly, UiState.defaultUiState())
 
     private fun handleEvent(event: Action) {
-        events.trySend(event)
+        Log.d("HaandleEventAction", event.toString())
+        val r = events.trySend(event)
+        Log.d("HandleEventAdded", r.toString())
     }
 
     fun setupAlarm(){
@@ -98,7 +108,10 @@ class MainViewModel(
                 pollCurrentEventCheckIn(action.currentEvents)
                 currentState.copy(currentEvents = action.currentEvents, futureEvents = action.futureEvents, isLoadingEvents = false)
             }
-            is Action.LocationUpdate -> TODO()
+            is Action.LocationUpdate -> {
+                checkLocation(currentState.currentEvents, action.location)
+                currentState.copy(currentLocation = action.location)
+            }
             is Action.LoadingEvents -> currentState.copy(isLoadingEvents = true)
             is Action.TimerTicked15Minutes -> {
                 getCalendarEvents()
@@ -123,24 +136,24 @@ class MainViewModel(
                 currentState.copy(currentEvents = events)
             }
             is Action.UpdatedEventCheckIn -> currentState.copy(currentEvents = action.events)
+            is Action.IsInLocationUpdated -> currentState.copy(currentEvents = action.events)
         }
     }
 
     private fun pollCurrentEventCheckIn(currentEvents: List<WrappedEvent>) {
         CoroutineScope(Dispatchers.IO).launch {
             delay(2000)
-            Log.e("ZZZZ", currentEvents.toString())
             val v = mutableListOf<WrappedEvent>()
             currentEvents.forEach {
-                Log.e("ZZZZ", it.toString())
                 val res = checkInManager.pollEventCheckin(it.event.id)
-                Log.e("ZZZZ", res.toString())
-                v.add(it.copy(checkedIn = res))
+                state.value.currentLocation?.let { loc ->
+                    v.add(it.copy(checkedIn = res, isInLocation = it.location?.let { loca -> loc.distanceTo(loca) < LOCATION_RADIUS } ?: false))
+                } ?: run {
+                    v.add(it.copy(checkedIn = res))
+                }
             }
 
-            Log.e("ZZZZ", v.toString())
             launch(Dispatchers.Main) {
-                Log.e("ZZZZ", v.toString())
                 handleEvent(Action.UpdatedEventCheckIn(v))
             }
         }
@@ -196,21 +209,44 @@ class MainViewModel(
             }
 
             //Check events for check in status
-            val timeFormatter = DateFormat.getTimeInstance(DateFormat.SHORT)
 
             val futureWrapped = future.map {
                 val start = timeFormatter.format(it.startTime)
                 val end = timeFormatter.format(it.endTime)
-                WrappedEvent(CheckInState.CantCheckIn, start, end, it)
+                
+                WrappedEvent(CheckInState.CantCheckIn, start, end, null, false, it)
             }
 
             val currentWrapped = current.map {
                 val start = timeFormatter.format(it.startTime)
                 val end = timeFormatter.format(it.endTime)
-                WrappedEvent(CheckInState.NotKnown, start, end, it)
+                
+                val loc = LocationMappingService.mapLeicesterLocationToLatLon(it.location)
+                WrappedEvent(CheckInState.NotKnown, start, end, loc, false, it)
             }
             handleEvent(Action.EventsCalculated(currentWrapped, futureWrapped))
         }
     }
+
+    private fun checkLocation(events: List<WrappedEvent>, location: Location){
+        val v = mutableListOf<WrappedEvent>()
+        Log.e("ZZZ-Location-Ckecking", events.toString())
+        events.forEach {
+            v.add(it.copy(isInLocation = isAtLocationOfEvent(it, location)))
+        }
+
+        viewModelScope.launch {
+            handleEvent(Action.IsInLocationUpdated(v))
+        }
+    }
+
+    private fun isAtLocationOfEvent(event: WrappedEvent, location: Location): Boolean {
+        return event.location?.let { loc -> location.distanceTo(loc) < LOCATION_RADIUS } ?: false
+    }
     fun startLocations() = locationManager.StartContinousServices()
+    
+    companion object {
+        const val LOCATION_RADIUS = 100
+        val timeFormatter: DateFormat = DateFormat.getTimeInstance(DateFormat.SHORT)
+    }
 }

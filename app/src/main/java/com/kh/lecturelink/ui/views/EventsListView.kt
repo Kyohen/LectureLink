@@ -53,13 +53,13 @@ fun CheckInButtonLabel(state: CheckInState) {
     }
 }
 
-fun buttonEnabled(state: CheckInState): Boolean {
+fun buttonEnabled(state: CheckInState, inLocation: Boolean): Boolean {
     return when (state) {
         CheckInState.CantCheckIn -> false
         CheckInState.CheckedIn -> false
         CheckInState.NotCheckedIn -> true
         CheckInState.NotKnown -> false
-    }
+    } && inLocation
 }
 
 @Composable
@@ -82,8 +82,11 @@ fun EventCardView(event: WrappedEvent, onCheckinClicked: (WrappedEvent) -> Unit,
                 Text(event.event.location)
                 Text("${event.startTime} - ${event.endTime}")
             }
+            event.location?.let {
+                if (event.isInLocation) Text("You are at ${event.event.location}", color = Color.Blue) else Text("You are not at ${event.event.location}", color = Color.Red)
+            }
             Row(Modifier.align(Alignment.End), verticalAlignment = Alignment.Bottom) {
-                Button(onClick = { onCheckinClicked(event) }, enabled = buttonEnabled(event.checkedIn)) {
+                Button(onClick = { onCheckinClicked(event) }, enabled = buttonEnabled(event.checkedIn, event.isInLocation)) {
                     CheckInButtonLabel(state = event.checkedIn)
                 }
             }
@@ -93,22 +96,19 @@ fun EventCardView(event: WrappedEvent, onCheckinClicked: (WrappedEvent) -> Unit,
 
 @Composable
 fun NoEventsView(text: String) {
-    OutlinedCard(elevation = CardDefaults.cardElevation(
-        defaultElevation = 6.dp
-    ),
+    OutlinedCard(
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 6.dp
+        ),
         modifier = Modifier
             .height(height = 100.dp)
             .fillMaxWidth(0.8F),
         border = BorderStroke(1.dp, Color.Black)
     ) {
-        Text(text, modifier = Modifier
-            .fillMaxSize()
-            .wrapContentHeight(), textAlign = TextAlign.Center, fontSize = 18.sp)
+        Text(
+            text, modifier = Modifier
+                .fillMaxSize()
+                .wrapContentHeight(), textAlign = TextAlign.Center, fontSize = 18.sp
+        )
     }
-}
-
-@Composable
-@Preview
-fun no() {
-    EventCardView(event = WrappedEvent(CheckInState.CantCheckIn, "10:00", "11:00", CalEvent("Agile", "SBB 1.01", 1, 0,1000)), onCheckinClicked = {}, titleLines = 2)
 }

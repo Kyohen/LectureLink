@@ -87,7 +87,6 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun RootView(viewModel: MainViewModel) {
-    val loc by viewModel.location.collectAsState()
     val state = viewModel.state.collectAsState()
 
     val locPermState = rememberPermissionState(permission = android.Manifest.permission.ACCESS_FINE_LOCATION)
@@ -108,24 +107,24 @@ fun RootView(viewModel: MainViewModel) {
     if(locPermState.status != PermissionStatus.Granted || calPermState.status != PermissionStatus.Granted) {
         EnablePermissionsScreen(locationPerm = locPermState, calendarPerm = calPermState, LocalContext.current)
     } else {
-        MainScreenView(viewModel, loc)
+        MainScreenView(viewModel)
     }
-    AnimatedVisibility(visible = loc?.latitude == null) {
+    AnimatedVisibility(visible = state.value.currentLocation?.latitude == null) {
         LoadingView("Fetching Location")
     }
 }
 
 @Composable
-fun MainScreenView(viewModel: MainViewModel, loc: Location?) {
+fun MainScreenView(viewModel: MainViewModel) {
     val state = viewModel.state.collectAsState()
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsState()
     val ctx = LocalContext.current
 
-    LaunchedEffect(lifecycle, loc) {
+    LaunchedEffect(lifecycle, state.value.currentLocation) {
         when (lifecycle) {
             Lifecycle.State.RESUMED -> {
                 Log.e("LIFECYCLE", "RESUMED")
-                loc?.latitude?.let {
+                state.value.currentLocation?.latitude?.let {
                     viewModel.onResume()
 //                    ctx.registerReceiver(viewModel.reciever, IntentFilter("ACTION_EVERY_MINUTE"), ContextCompat.RECEIVER_NOT_EXPORTED)
                 }

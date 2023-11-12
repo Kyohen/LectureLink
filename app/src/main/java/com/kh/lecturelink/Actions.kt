@@ -13,4 +13,5 @@ sealed class Action {
 
     data class HavePolledEvent(val eventId: Long, val state: CheckInState): Action()
     data class UpdatedEventCheckIn(val events: List<WrappedEvent>): Action()
+    data class IsInLocationUpdated(val events: List<WrappedEvent>): Action()
 }
