@@ -58,6 +58,7 @@ import com.google.accompanist.permissions.shouldShowRationale
 import com.kh.lecturelink.MainViewModel
 import com.kh.lecturelink.Managers.AppLocationManager
 import com.kh.lecturelink.Managers.CalendarManager
+import com.kh.lecturelink.Managers.CheckInManager
 import com.kh.lecturelink.WrappedEvent
 import com.kh.lecturelink.ui.theme.LectureLinkTheme
 
@@ -76,7 +77,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    RootView(MainViewModel(calendarManager, locManager))
+                    RootView(MainViewModel(calendarManager, locManager, CheckInManager(applicationContext)))
                 }
             }
         }
@@ -118,16 +119,22 @@ fun RootView(viewModel: MainViewModel) {
 fun MainScreenView(viewModel: MainViewModel, loc: Location?) {
     val state = viewModel.state.collectAsState()
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsState()
+    val ctx = LocalContext.current
 
     LaunchedEffect(lifecycle, loc) {
         when (lifecycle) {
             Lifecycle.State.RESUMED -> {
+                Log.e("LIFECYCLE", "RESUMED")
                 loc?.latitude?.let {
                     viewModel.onResume()
+//                    ctx.registerReceiver(viewModel.reciever, IntentFilter("ACTION_EVERY_MINUTE"), ContextCompat.RECEIVER_NOT_EXPORTED)
                 }
             }
             else -> {
-
+                if (lifecycle.isAtLeast(Lifecycle.State.RESUMED)) {
+                    Log.e("LIFECYCLE", "Not Resumed")
+//                    viewModel.cancelAlarms()
+                }
             }
         }
     }
@@ -139,13 +146,21 @@ fun MainScreenView(viewModel: MainViewModel, loc: Location?) {
         AnimatedVisibility(visible = state.value.isLoadingEvents) {
             LoadingView(text = "Loading Events")
         }
-        CurrentAndUpcomingEventsView(currentEvents = state.value.currentEvents, upcomingEvents = state.value.futureEvents, onCheckIn = viewModel::checkIn)
+        Button(onClick = viewModel::clearDatabase) {
+            Text("Clear data")
+        }
+        CurrentAndUpcomingEventsView(
+            currentEvents = state.value.currentEvents,
+            upcomingEvents = state.value.futureEvents,
+            onCheckIn = viewModel::checkIn,
+            state.value.lastFetchInMinutes
+        )
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CurrentAndUpcomingEventsView(currentEvents: List<WrappedEvent>, upcomingEvents: List<WrappedEvent>, onCheckIn: (WrappedEvent) -> Unit) {
+fun CurrentAndUpcomingEventsView(currentEvents: List<WrappedEvent>, upcomingEvents: List<WrappedEvent>, onCheckIn: (WrappedEvent) -> Unit, timeSincefetch: String) {
     Scaffold(topBar = {
         TopAppBar(
             colors = TopAppBarDefaults.smallTopAppBarColors(
@@ -157,14 +172,22 @@ fun CurrentAndUpcomingEventsView(currentEvents: List<WrappedEvent>, upcomingEven
             }
         )
     }) {
-        Column(Modifier.fillMaxSize().padding(it), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("Current Events", fontSize = 25.sp, modifier = Modifier.align(Alignment.Start).padding(6.dp))
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(it), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("last updated: $timeSincefetch")
+            Text("Current Events", fontSize = 25.sp, modifier = Modifier
+                .align(Alignment.Start)
+                .padding(6.dp))
             Divider(Modifier.padding(bottom = 16.dp))
             EventsListView(list = currentEvents, onCheckIn, titleLines = 1) {
                 NoEventsView("You have no current events")
             }
 
-            Text("Upcoming Events", fontSize = 25.sp, modifier = Modifier.align(Alignment.Start).padding(6.dp))
+            Text("Upcoming Events", fontSize = 25.sp, modifier = Modifier
+                .align(Alignment.Start)
+                .padding(6.dp))
             Divider(Modifier.padding(bottom = 16.dp))
             EventsListView(list = upcomingEvents, onCheckInClicked = {}, titleLines = 2) {
                 NoEventsView("You have no upcoming events")

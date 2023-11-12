@@ -33,8 +33,7 @@ class CalendarManager(private val contentResolver: ContentResolver) {
 
         val calUri: Uri = CalendarContract.Calendars.CONTENT_URI
 
-        const val selectionEvents = "(${CalendarContract.Events.CALENDAR_DISPLAY_NAME} = ?) AND (${CalendarContract.Events.DTSTART} >= ?) AND (${CalendarContract.Events.DTSTART} <= ?)"
-
+        const val selectionEvents = "(${CalendarContract.Events.CALENDAR_DISPLAY_NAME} = ?) AND (${CalendarContract.Events.DTEND} >= ?) AND (${CalendarContract.Events.DTSTART} <= ?)"
     }
 
     fun fetchCalendars() {
