@@ -11,6 +11,11 @@ class CheckInManager(context: Context) {
         return if (store.pollEventCheckIn(eventId)) CheckInState.CheckedIn else CheckInState.NotCheckedIn
     }
 
+    suspend fun checkOut(id: Long): CheckInState {
+        store.checkOut(id)
+        return pollEventCheckin(id)
+    }
+
     // checks in user and returns the new result
     suspend fun checkIn(id: Long): CheckInState {
         store.checkIn(id)

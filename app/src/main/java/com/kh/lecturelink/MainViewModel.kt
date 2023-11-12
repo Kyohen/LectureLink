@@ -4,7 +4,6 @@ import android.location.Location
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.kh.lecturelink.Managers.CalEvent
 import com.kh.lecturelink.Managers.CalendarManager
 import com.kh.lecturelink.Managers.CheckInManager
 import com.kh.lecturelink.Managers.LocationManaging
@@ -22,34 +21,6 @@ import java.text.DateFormat
 import java.util.Calendar
 import java.util.TimeZone
 import kotlin.math.floor
-
-sealed class CheckInState {
-    object CheckedIn: CheckInState()
-    object CantCheckIn: CheckInState()
-    object NotCheckedIn: CheckInState()
-    object NotKnown: CheckInState()
-}
-data class WrappedEvent(
-    val checkedIn: CheckInState,
-    val startTime: String,
-    val endTime: String,
-    val location: Location?,
-    val isInLocation: Boolean,
-    val event: CalEvent
-)
-
-data class UiState(
-    val currentEvents: List<WrappedEvent>,
-    val futureEvents: List<WrappedEvent>,
-    val isLoadingEvents: Boolean,
-    val lastFetchInMinutes: String,
-    val timerToggled: Boolean,
-    val currentLocation: Location?
-) {
-    companion object {
-        fun defaultUiState(): UiState = UiState(listOf(), listOf(), false, "now", false, null)
-    }
-}
 
 class MainViewModel(
     private val calendarManager: CalendarManager,
@@ -109,7 +80,7 @@ class MainViewModel(
                 currentState.copy(currentEvents = action.currentEvents, futureEvents = action.futureEvents, isLoadingEvents = false)
             }
             is Action.LocationUpdate -> {
-                checkLocation(currentState.currentEvents, action.location)
+                pollCurrentEventCheckIn(currentState.currentEvents)
                 currentState.copy(currentLocation = action.location)
             }
             is Action.LoadingEvents -> currentState.copy(isLoadingEvents = true)
@@ -142,12 +113,18 @@ class MainViewModel(
 
     private fun pollCurrentEventCheckIn(currentEvents: List<WrappedEvent>) {
         CoroutineScope(Dispatchers.IO).launch {
-            delay(2000)
+//            delay(2000)
             val v = mutableListOf<WrappedEvent>()
             currentEvents.forEach {
-                val res = checkInManager.pollEventCheckin(it.event.id)
+                // get check-in state
+                var res = checkInManager.pollEventCheckin(it.event.id)
                 state.value.currentLocation?.let { loc ->
-                    v.add(it.copy(checkedIn = res, isInLocation = it.location?.let { loca -> loc.distanceTo(loca) < LOCATION_RADIUS } ?: false))
+                    // check whether current location is in range, if signedIn and not in area, sign them out
+                    val inArea = isAtLocationOfEvent(it, loc)
+                    if (res is CheckInState.CheckedIn && !inArea) {
+                        res = checkInManager.checkOut(it.event.id)
+                    }
+                    v.add(it.copy(checkedIn = res, isInLocation = inArea))
                 } ?: run {
                     v.add(it.copy(checkedIn = res))
                 }

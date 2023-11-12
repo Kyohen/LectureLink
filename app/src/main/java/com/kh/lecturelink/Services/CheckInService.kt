@@ -14,7 +14,7 @@ interface CheckInService {
     suspend fun checkIn(eventId: Long)
     suspend fun pollEventCheckIn(eventId: Long): Boolean
 
-    fun checkOut(eventId: Long)
+    suspend fun checkOut(eventId: Long)
 }
 
 class LocalCheckInService(private val appContext: Context): CheckInService {
@@ -42,8 +42,11 @@ class LocalCheckInService(private val appContext: Context): CheckInService {
             }.first()
     }
 
-    override fun checkOut(eventId: Long) {
-        TODO("Not yet implemented")
+    override suspend fun checkOut(eventId: Long) {
+        val EXAMPLE_COUNTER = booleanPreferencesKey("event_${eventId}")
+        appContext.dataStore.edit { settings ->
+            settings[EXAMPLE_COUNTER] = false
+        }
     }
 
 }
