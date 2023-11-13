@@ -4,6 +4,7 @@ import android.location.Location
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.android.gms.location.GeofencingClient
 import com.kh.lecturelink.Managers.CalendarManager
 import com.kh.lecturelink.Managers.CheckInManager
 import com.kh.lecturelink.Managers.LocationManaging
@@ -25,7 +26,8 @@ import kotlin.math.floor
 class MainViewModel(
     private val calendarManager: CalendarManager,
     private val locationManager: LocationManaging,
-    private val checkInManager: CheckInManager
+    private val checkInManager: CheckInManager,
+    private val geoFenceClient: GeofencingClient
 ): ViewModel() {
     private val events = Channel<Action>()
 
@@ -108,6 +110,20 @@ class MainViewModel(
             }
             is Action.UpdatedEventCheckIn -> currentState.copy(currentEvents = action.events)
             is Action.IsInLocationUpdated -> currentState.copy(currentEvents = action.events)
+            is Action.PasswordCorrectFor -> {
+                checkIn(action.eventId)
+                currentState.copy(authState = AuthState(false, false, null))
+            }
+            is Action.CheckInPressed -> {
+                action.event.password?.let {
+                    currentState.copy(authState = AuthState(true, false, action.event))
+                } ?: run {
+                    checkIn(action.event)
+                    currentState
+                }
+            }
+            is Action.AuthCancelled -> currentState.copy(authState = AuthState(false, false, null))
+            is Action.PasswordIncorrect -> currentState.copy(authState = currentState.authState.copy(authFailed = true))
         }
     }
 
@@ -152,6 +168,10 @@ class MainViewModel(
         }
     }
 
+    fun checkInPressed(calEvent: WrappedEvent) {
+        handleEvent(Action.CheckInPressed(calEvent))
+    }
+
     fun onResume() {
         getCalendarEvents()
         setupAlarm()
@@ -167,16 +187,13 @@ class MainViewModel(
         viewModelScope.launch {
             val c = Calendar.getInstance()
             c.timeZone = TimeZone.getTimeZone("UTC")
-            c.add(Calendar.DATE, 4)
+            c.add(Calendar.DATE, 1)
             c.set(Calendar.HOUR_OF_DAY, 0)
             c.set(Calendar.MINUTE, 0)
             c.set(Calendar.SECOND, 0)
 
             val currentTime = Calendar.getInstance()
             currentTime.timeZone = TimeZone.getTimeZone("UTC")
-            currentTime.set(Calendar.HOUR_OF_DAY, 11)
-            currentTime.set(Calendar.MINUTE, 44)
-            currentTime.add(Calendar.DATE, 3)
 
             val events = calendarManager.fetchEvents("Calendar", currentTime, c)
 
@@ -191,7 +208,7 @@ class MainViewModel(
                 val start = timeFormatter.format(it.startTime)
                 val end = timeFormatter.format(it.endTime)
                 
-                WrappedEvent(CheckInState.CantCheckIn, start, end, null, false, it)
+                WrappedEvent(CheckInState.CantCheckIn, start, end, null, false, it, "password")
             }
 
             val currentWrapped = current.map {
@@ -199,21 +216,9 @@ class MainViewModel(
                 val end = timeFormatter.format(it.endTime)
                 
                 val loc = LocationMappingService.mapLeicesterLocationToLatLon(it.location)
-                WrappedEvent(CheckInState.NotKnown, start, end, loc, false, it)
+                WrappedEvent(CheckInState.NotKnown, start, end, loc, false, it, "password")
             }
             handleEvent(Action.EventsCalculated(currentWrapped, futureWrapped))
-        }
-    }
-
-    private fun checkLocation(events: List<WrappedEvent>, location: Location){
-        val v = mutableListOf<WrappedEvent>()
-        Log.e("ZZZ-Location-Ckecking", events.toString())
-        events.forEach {
-            v.add(it.copy(isInLocation = isAtLocationOfEvent(it, location)))
-        }
-
-        viewModelScope.launch {
-            handleEvent(Action.IsInLocationUpdated(v))
         }
     }
 
@@ -221,7 +226,20 @@ class MainViewModel(
         return event.location?.let { loc -> location.distanceTo(loc) < LOCATION_RADIUS } ?: false
     }
     fun startLocations() = locationManager.StartContinousServices()
-    
+
+    fun passwordSubmit(password: String, calEvent: WrappedEvent) {
+        calEvent.password?.let {
+            if (password == it)
+                handleEvent(Action.PasswordCorrectFor(calEvent))
+            else
+                handleEvent(Action.PasswordIncorrect)
+        }
+    }
+
+    fun authCancelled() {
+        handleEvent(Action.AuthCancelled)
+    }
+
     companion object {
         const val LOCATION_RADIUS = 100
         val timeFormatter: DateFormat = DateFormat.getTimeInstance(DateFormat.SHORT)

@@ -2,7 +2,6 @@ package com.kh.lecturelink.ui.views
 
 import android.content.Context
 import android.content.Intent
-import android.location.Location
 import android.location.LocationManager
 import android.net.Uri
 import android.os.Bundle
@@ -15,6 +14,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -55,6 +55,7 @@ import com.google.accompanist.permissions.PermissionState
 import com.google.accompanist.permissions.PermissionStatus
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.accompanist.permissions.shouldShowRationale
+import com.google.android.gms.location.LocationServices
 import com.kh.lecturelink.MainViewModel
 import com.kh.lecturelink.Managers.AppLocationManager
 import com.kh.lecturelink.Managers.CalendarManager
@@ -70,6 +71,7 @@ class MainActivity : ComponentActivity() {
         service = applicationContext.getSystemService(Context.LOCATION_SERVICE) as LocationManager
         val locManager = AppLocationManager(service)
         val calendarManager = CalendarManager(contentResolver)
+        val geoFenceClient = LocationServices.getGeofencingClient(this)
         setContent {
             LectureLinkTheme {
                 // A surface container using the 'background' color from the theme
@@ -77,7 +79,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    RootView(MainViewModel(calendarManager, locManager, CheckInManager(applicationContext)))
+                    RootView(MainViewModel(calendarManager, locManager, CheckInManager(applicationContext), geoFenceClient))
                 }
             }
         }
@@ -145,15 +147,22 @@ fun MainScreenView(viewModel: MainViewModel) {
         AnimatedVisibility(visible = state.value.isLoadingEvents) {
             LoadingView(text = "Loading Events")
         }
-        Button(onClick = viewModel::clearDatabase) {
-            Text("Clear data")
+        Box {
+            CurrentAndUpcomingEventsView(
+                currentEvents = state.value.currentEvents,
+                upcomingEvents = state.value.futureEvents,
+                onCheckIn = viewModel::checkInPressed,
+                state.value.lastFetchInMinutes
+            )
+            if (state.value.authState.needAuth) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier
+                    .fillMaxSize()
+                    .padding(), verticalArrangement = Arrangement.Center) {
+                    AuthView(passwordSubmitted = viewModel::passwordSubmit, viewModel::authCancelled, state.value.authState.event!!, state.value.authState.authFailed)
+                }
+
+            }
         }
-        CurrentAndUpcomingEventsView(
-            currentEvents = state.value.currentEvents,
-            upcomingEvents = state.value.futureEvents,
-            onCheckIn = viewModel::checkIn,
-            state.value.lastFetchInMinutes
-        )
     }
 }
 

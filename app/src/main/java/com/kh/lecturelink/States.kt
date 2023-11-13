@@ -15,8 +15,19 @@ data class WrappedEvent(
     val endTime: String,
     val location: Location?,
     val isInLocation: Boolean,
-    val event: CalEvent
+    val event: CalEvent,
+    val password: String?
 )
+
+data class AuthState(
+    val needAuth: Boolean,
+    val authFailed: Boolean,
+    val event: WrappedEvent?
+) {
+    companion object {
+        fun defaultAuthState(): AuthState = AuthState(false, false, null)
+    }
+}
 
 data class UiState(
     val currentEvents: List<WrappedEvent>,
@@ -24,9 +35,10 @@ data class UiState(
     val isLoadingEvents: Boolean,
     val lastFetchInMinutes: String,
     val timerToggled: Boolean,
-    val currentLocation: Location?
+    val currentLocation: Location?,
+    val authState: AuthState
 ) {
     companion object {
-        fun defaultUiState(): UiState = UiState(listOf(), listOf(), false, "now", false, null)
+        fun defaultUiState(): UiState = UiState(listOf(), listOf(), false, "now", false, null, AuthState.defaultAuthState())
     }
 }
