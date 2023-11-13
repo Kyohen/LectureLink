@@ -1,4 +1,4 @@
-package com.kh.lecturelink
+package com.kh.lecturelink.Managers
 
 import android.content.ContentResolver
 import android.database.Cursor
@@ -8,12 +8,13 @@ import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.util.Calendar
-import java.util.Date
 
 data class CalEvent(
     val title: String,
     val location: String,
-    val id: Long
+    val id: Long,
+    val startTime: Long,
+    val endTime: Long
 )
 class CalendarManager(private val contentResolver: ContentResolver) {
     private var _calendarsList = MutableStateFlow<List<String>>(listOf())
@@ -32,22 +33,8 @@ class CalendarManager(private val contentResolver: ContentResolver) {
 
         val calUri: Uri = CalendarContract.Calendars.CONTENT_URI
 
-        const val selectionEvents = "(${CalendarContract.Events.CALENDAR_DISPLAY_NAME} = ?)" + " AND (${CalendarContract.Events.DTSTART} >= ?) AND (${CalendarContract.Events.DTEND} <= ?)"
-
+        const val selectionEvents = "(${CalendarContract.Events.CALENDAR_DISPLAY_NAME} = ?) AND (${CalendarContract.Events.DTEND} >= ?) AND (${CalendarContract.Events.DTSTART} <= ?)"
     }
-
-//    Calendar startTime = Calendar.getInstance();
-//
-//    startTime.set(Calendar.HOUR_OF_DAY,0);
-//    startTime.set(Calendar.MINUTE,0);
-//    startTime.set(Calendar.SECOND, 0);
-//
-//    Calendar endTime= Calendar.getInstance();
-//    endTime.add(Calendar.DATE, 1);
-//
-//    String selection = "(( " + CalendarContract.Events.DTSTART + " >= " + startTime.getTimeInMillis() + " ) AND ( " + CalendarContract.Events.DTSTART + " <= " + endTime.getTimeInMillis() + " ) AND ( deleted != 1 ))";
-//    Cursor cursor = context.getContentResolver().query(CalendarContract.Events.CONTENT_URI, projection, selection, null, null);
-
 
     fun fetchCalendars() {
         var cur: Cursor? = null
@@ -76,14 +63,14 @@ class CalendarManager(private val contentResolver: ContentResolver) {
         }
     }
 
-    fun fetchEvents(calendar: String, firstDate: Calendar, endDate: Calendar) {
+    fun fetchEvents(calendar: String, firstDate: Calendar, endDate: Calendar): List<CalEvent> {
         val selectArgs = arrayOf(calendar, firstDate.timeInMillis.toString(), endDate.timeInMillis.toString())
         val cur2 = contentResolver.query(
             CalendarContract.Events.CONTENT_URI,
-            arrayOf(CalendarContract.Events.EVENT_LOCATION, CalendarContract.Events.TITLE, CalendarContract.Events.DESCRIPTION, CalendarContract.Events._ID),
+            arrayOf(CalendarContract.Events.EVENT_LOCATION, CalendarContract.Events.TITLE, CalendarContract.Events._ID, CalendarContract.Events.DTSTART, CalendarContract.Events.DTEND),
             selectionEvents,
             selectArgs,
-            null
+            "${CalendarContract.Events.DTSTART} ASC"
         ) as Cursor
 
         val events = mutableListOf<CalEvent>()
@@ -91,20 +78,17 @@ class CalendarManager(private val contentResolver: ContentResolver) {
             // Get the field values
             val location: String = cur2.getString(0)
             val title: String = cur2.getString(1)
-            var desc = ""
-            try {
-                desc = cur2.getString(2)
-            } catch(_: Exception) {
 
-            }
+            val id = cur2.getLong(2)
+            val startTime = cur2.getLong(3)
+            val endTime = cur2.getLong(4)
 
-            val id = cur2.getLong(3)
-
-            events.add(CalEvent(title, location, id))
+            events.add(CalEvent(title, location, id, startTime, endTime))
         }
 
         _events.value = events.toList()
         cur2.close()
+        return events.toList()
     }
 
 }
