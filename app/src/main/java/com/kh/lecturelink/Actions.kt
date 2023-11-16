@@ -17,4 +17,6 @@ sealed class Action {
     data class CheckInPressed(val event: WrappedEvent): Action()
     object AuthCancelled: Action()
     object PasswordIncorrect: Action()
+    data class biometricSucceeded(val event: WrappedEvent): Action()
+    object biometricFailed: Action()
 }

@@ -9,6 +9,9 @@ import android.provider.Settings
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.appcompat.app.AppCompatActivity
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
@@ -49,6 +52,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionState
@@ -62,8 +66,11 @@ import com.kh.lecturelink.Managers.CalendarManager
 import com.kh.lecturelink.Managers.CheckInManager
 import com.kh.lecturelink.WrappedEvent
 import com.kh.lecturelink.ui.theme.LectureLinkTheme
+import java.security.Key
+import javax.crypto.Cipher
+import javax.crypto.SecretKey
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     private lateinit var service: LocationManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -79,7 +86,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    RootView(MainViewModel(calendarManager, locManager, CheckInManager(applicationContext), geoFenceClient))
+                    RootView(MainViewModel(applicationContext, calendarManager, locManager, CheckInManager(applicationContext), geoFenceClient, BiometricManager.from(this)))
                 }
             }
         }
@@ -131,6 +138,7 @@ fun MainScreenView(viewModel: MainViewModel) {
 //                    ctx.registerReceiver(viewModel.reciever, IntentFilter("ACTION_EVERY_MINUTE"), ContextCompat.RECEIVER_NOT_EXPORTED)
                 }
             }
+
             else -> {
                 if (lifecycle.isAtLeast(Lifecycle.State.RESUMED)) {
                     Log.e("LIFECYCLE", "Not Resumed")
@@ -155,16 +163,29 @@ fun MainScreenView(viewModel: MainViewModel) {
                 state.value.lastFetchInMinutes
             )
             if (state.value.authState.needAuth) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier
-                    .fillMaxSize()
-                    .padding(), verticalArrangement = Arrangement.Center) {
-                    AuthView(passwordSubmitted = viewModel::passwordSubmit, viewModel::authCancelled, state.value.authState.event!!, state.value.authState.authFailed)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier
+                        .fillMaxSize()
+                        .padding(), verticalArrangement = Arrangement.Center
+                ) {
+                    AuthView(
+                        passwordSubmitted = viewModel::passwordSubmit,
+                        viewModel::authCancelled,
+                        state.value.authState.event!!,
+                        state.value.authState.authFailed
+                    )
                 }
+            }
 
+            if (state.value.needBiometric) {
+                val activity = LocalContext.current as FragmentActivity
+                val prompt = BiometricPrompt(activity, viewModel.biometricCallback)
+                prompt.authenticate(viewModel.promptInfo)
             }
         }
     }
 }
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

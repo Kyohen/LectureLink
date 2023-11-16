@@ -16,10 +16,10 @@ interface CheckInService {
 
     suspend fun checkOut(eventId: Long)
 }
+val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
 class LocalCheckInService(private val appContext: Context): CheckInService {
 
-    val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
     override suspend fun checkIn(eventId: Long) {
         val EXAMPLE_COUNTER = booleanPreferencesKey("event_${eventId}")
         appContext.dataStore.edit { settings ->

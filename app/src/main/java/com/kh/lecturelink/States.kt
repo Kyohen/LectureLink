@@ -36,9 +36,10 @@ data class UiState(
     val lastFetchInMinutes: String,
     val timerToggled: Boolean,
     val currentLocation: Location?,
-    val authState: AuthState
+    val authState: AuthState,
+    val needBiometric: Boolean
 ) {
     companion object {
-        fun defaultUiState(): UiState = UiState(listOf(), listOf(), false, "now", false, null, AuthState.defaultAuthState())
+        fun defaultUiState(): UiState = UiState(listOf(), listOf(), false, "now", false, null, AuthState.defaultAuthState(), false)
     }
 }

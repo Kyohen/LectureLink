@@ -1,13 +1,28 @@
 package com.kh.lecturelink
 
+import android.Manifest
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.location.Location
+import android.security.keystore.KeyProperties
 import android.util.Log
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
+import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK
+import androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
+import androidx.biometric.BiometricPrompt
+import androidx.core.app.ActivityCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.android.gms.location.Geofence
 import com.google.android.gms.location.GeofencingClient
+import com.google.android.gms.location.GeofencingRequest
 import com.kh.lecturelink.Managers.CalendarManager
 import com.kh.lecturelink.Managers.CheckInManager
 import com.kh.lecturelink.Managers.LocationManaging
+import com.kh.lecturelink.Services.GeofenceBroadcastReceiver
 import com.kh.lecturelink.Services.LocationMappingService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -21,19 +36,96 @@ import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Calendar
 import java.util.TimeZone
+import javax.crypto.Cipher
 import kotlin.math.floor
 
 class MainViewModel(
+    private val context: Context,
     private val calendarManager: CalendarManager,
     private val locationManager: LocationManaging,
     private val checkInManager: CheckInManager,
-    private val geoFenceClient: GeofencingClient
+    private val geoFenceClient: GeofencingClient,
+    private val biometricManager: BiometricManager
 ): ViewModel() {
     private val events = Channel<Action>()
-
     private var lastFetch = Calendar.getInstance()
-
     private var lastRun = System.currentTimeMillis()
+
+    val biometricCallback = object : BiometricPrompt.AuthenticationCallback() {
+        override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+            handleEvent(Action.biometricFailed)
+        }
+
+        override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+            state.value.authState.event?.let { Action.biometricSucceeded(it) }
+                ?.let { handleEvent(it) }
+        }
+    }
+
+    val promptInfo = BiometricPrompt.PromptInfo.Builder()
+        .setTitle("Biometric login for my app")
+        .setSubtitle("Log in using your biometric credential")
+        .setAllowedAuthenticators(BIOMETRIC_STRONG or DEVICE_CREDENTIAL or BIOMETRIC_WEAK)
+        .build()
+
+    fun setupGeoFence(context: Context, location: Location, expirary: Long, eventID: String) {
+            val geofencePendingIntent: PendingIntent by lazy {
+                val intent = Intent(context, GeofenceBroadcastReceiver::class.java)
+                // We use FLAG_UPDATE_CURRENT so that we get the same pending intent back when calling
+                // addGeofences() and removeGeofences().
+                PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT)
+            }
+
+            val v = Geofence.Builder()
+                // Set the request ID of the geofence. This is a string to identify this
+                // geofence.
+                .setRequestId(eventID)
+
+                // Set the circular region of this geofence.
+                .setCircularRegion(
+                    location.latitude,
+                    location.longitude,
+                    LOCATION_RADIUS.toFloat()
+                )
+
+                // Set the expiration duration of the geofence. This geofence gets automatically
+                // removed after this period of time.
+                .setExpirationDuration(expirary)
+
+                // Set the transition types of interest. Alerts are only generated for these
+                // transition. We track entry and exit transitions in this sample.
+                .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_ENTER or Geofence.GEOFENCE_TRANSITION_EXIT)
+
+                // Create the geofence.
+                .build()
+
+
+            val req = GeofencingRequest.Builder().apply {
+                setInitialTrigger(GeofencingRequest.INITIAL_TRIGGER_ENTER)
+                addGeofence(v)
+            }.build()
+
+            if (ActivityCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.ACCESS_FINE_LOCATION
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                return
+            }
+        geoFenceClient.addGeofences(req, geofencePendingIntent).run {
+            addOnSuccessListener {
+                // Geofences added
+                // ...
+                Log.d("ZZZ", "Added")
+            }
+            addOnFailureListener {e ->
+                // Failed to add geofences
+                // ...
+                Log.d("ZZZ", "Failed $e")
+            }
+        }
+    }
+
     private val updateEveryMinuteRoutine = suspend {
         while (true) {
             val currentTime = System.currentTimeMillis()
@@ -111,8 +203,11 @@ class MainViewModel(
             is Action.UpdatedEventCheckIn -> currentState.copy(currentEvents = action.events)
             is Action.IsInLocationUpdated -> currentState.copy(currentEvents = action.events)
             is Action.PasswordCorrectFor -> {
-                checkIn(action.eventId)
-                currentState.copy(authState = AuthState(false, false, null))
+                val needBio = biometricManager.canAuthenticate(BIOMETRIC_STRONG or BIOMETRIC_WEAK or DEVICE_CREDENTIAL)
+                if (needBio != 0) {
+                    checkIn(action.eventId)
+                }
+                currentState.copy(authState = AuthState(false, false, action.eventId), needBiometric = needBio == 0)
             }
             is Action.CheckInPressed -> {
                 action.event.password?.let {
@@ -124,6 +219,11 @@ class MainViewModel(
             }
             is Action.AuthCancelled -> currentState.copy(authState = AuthState(false, false, null))
             is Action.PasswordIncorrect -> currentState.copy(authState = currentState.authState.copy(authFailed = true))
+            is Action.biometricFailed -> currentState
+            is Action.biometricSucceeded -> {
+                checkIn(action.event)
+                currentState.copy(authState = currentState.authState.copy(event = null), needBiometric = false)
+            }
         }
     }
 
@@ -158,8 +258,11 @@ class MainViewModel(
             pollCurrentEventCheckIn(state.value.currentEvents)
         }
     }
-    fun checkIn(calEvent: WrappedEvent) {
+    private fun checkIn(calEvent: WrappedEvent) {
         //TODO: Authenticate User, check-in with server (or local) using auth details
+        calEvent.location?.let {
+            setupGeoFence(context, it, 1000*60*15, calEvent.event.id.toString())
+        }
         CoroutineScope(Dispatchers.IO).launch {
             val res = checkInManager.checkIn(calEvent.event.id)
             launch(Dispatchers.Main) {
@@ -193,8 +296,13 @@ class MainViewModel(
             c.set(Calendar.SECOND, 0)
 
             val currentTime = Calendar.getInstance()
+            currentTime.add(Calendar.DATE, 0)
+            currentTime.set(Calendar.HOUR_OF_DAY, 12)
+            currentTime.set(Calendar.MINUTE, 0)
+            currentTime.set(Calendar.SECOND, 0)
             currentTime.timeZone = TimeZone.getTimeZone("UTC")
-
+//            Log.e("ZZZ", DateFormat.getTimeInstance(DateFormat.LONG).format(currentTime.timeInMillis))
+//            Log.e("ZZZ", DateFormat.getDateInstance(DateFormat.LONG).format(currentTime.timeInMillis))
             val events = calendarManager.fetchEvents("Calendar", currentTime, c)
 
             //cases: current time after startTime - 15mins && currentTime is before end time
