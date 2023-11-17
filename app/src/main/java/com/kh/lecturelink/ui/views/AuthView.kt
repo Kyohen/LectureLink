@@ -1,5 +1,6 @@
 package com.kh.lecturelink.ui.views
 
+import android.content.Context
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,14 +23,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.kh.lecturelink.WrappedEvent
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AuthView(passwordSubmitted: (String, WrappedEvent) -> Unit, cancel: () -> Unit, event: WrappedEvent, authfailed: Boolean) {
+fun AuthView(passwordSubmitted: (String, WrappedEvent, Context) -> Unit, cancel: () -> Unit, event: WrappedEvent, authfailed: Boolean) {
     var txt by remember { mutableStateOf("") }
+    val ctx = LocalContext.current
     
     OutlinedCard(
         elevation = CardDefaults.cardElevation(
@@ -63,7 +66,7 @@ fun AuthView(passwordSubmitted: (String, WrappedEvent) -> Unit, cancel: () -> Un
                     visualTransformation = PasswordVisualTransformation()
                 )
             }
-            Button({ passwordSubmitted(txt, event) }, modifier = Modifier.fillMaxWidth(0.8f)) {
+            Button({ passwordSubmitted(txt, event, ctx) }, modifier = Modifier.fillMaxWidth(0.8f)) {
                 Text("Submit")
             }
             Button(cancel, modifier = Modifier.fillMaxWidth(0.6f)) {

@@ -44,7 +44,7 @@ class AppLocationManager(private val client: LocationManager) : LocationManaging
     override fun StartContinousServices() {
         Log.d("ZZZ", client.allProviders.toString())
         try {
-            client.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 50f, this)
+            client.requestLocationUpdates(LocationManager.FUSED_PROVIDER, 1000L, 50f, this)
             servicesStarted = true
         } catch (e: SecurityException) {
             Log.e("LocationManager", "Tried to access without permission")

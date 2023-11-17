@@ -9,6 +9,7 @@ import android.provider.Settings
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
@@ -54,16 +55,20 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ViewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionState
 import com.google.accompanist.permissions.PermissionStatus
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.accompanist.permissions.shouldShowRationale
+import com.google.android.gms.location.GeofencingClient
 import com.google.android.gms.location.LocationServices
+import com.kh.lecturelink.BiometricCallBack
 import com.kh.lecturelink.MainViewModel
 import com.kh.lecturelink.Managers.AppLocationManager
 import com.kh.lecturelink.Managers.CalendarManager
 import com.kh.lecturelink.Managers.CheckInManager
+import com.kh.lecturelink.Managers.LocationManaging
 import com.kh.lecturelink.WrappedEvent
 import com.kh.lecturelink.ui.theme.LectureLinkTheme
 import java.security.Key
@@ -72,6 +77,7 @@ import javax.crypto.SecretKey
 
 class MainActivity : FragmentActivity() {
     private lateinit var service: LocationManager
+    val viewModel: MainViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -79,6 +85,12 @@ class MainActivity : FragmentActivity() {
         val locManager = AppLocationManager(service)
         val calendarManager = CalendarManager(contentResolver)
         val geoFenceClient = LocationServices.getGeofencingClient(this)
+
+        viewModel.setLocation(locManager)
+        viewModel.calendarManager = calendarManager
+        viewModel.geoFenceClient = geoFenceClient
+        viewModel.checkInManager = CheckInManager(applicationContext)
+        viewModel.biometricManager = BiometricManager.from(this)
         setContent {
             LectureLinkTheme {
                 // A surface container using the 'background' color from the theme
@@ -86,7 +98,8 @@ class MainActivity : FragmentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    RootView(MainViewModel(applicationContext, calendarManager, locManager, CheckInManager(applicationContext), geoFenceClient, BiometricManager.from(this)))
+//                    RootView(MainViewModel(applicationContext, calendarManager, locManager, CheckInManager(applicationContext), geoFenceClient, BiometricManager.from(this)))
+                    RootView(viewModel)
                 }
             }
         }
@@ -179,7 +192,8 @@ fun MainScreenView(viewModel: MainViewModel) {
 
             if (state.value.needBiometric) {
                 val activity = LocalContext.current as FragmentActivity
-                val prompt = BiometricPrompt(activity, viewModel.biometricCallback)
+
+                val prompt = BiometricPrompt(activity, BiometricCallBack(ctx, viewModel::handleEvent))
                 prompt.authenticate(viewModel.promptInfo)
             }
         }
@@ -189,7 +203,7 @@ fun MainScreenView(viewModel: MainViewModel) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CurrentAndUpcomingEventsView(currentEvents: List<WrappedEvent>, upcomingEvents: List<WrappedEvent>, onCheckIn: (WrappedEvent) -> Unit, timeSincefetch: String) {
+fun CurrentAndUpcomingEventsView(currentEvents: List<WrappedEvent>, upcomingEvents: List<WrappedEvent>, onCheckIn: (WrappedEvent, Context) -> Unit, timeSincefetch: String) {
     Scaffold(topBar = {
         TopAppBar(
             colors = TopAppBarDefaults.smallTopAppBarColors(
@@ -218,7 +232,7 @@ fun CurrentAndUpcomingEventsView(currentEvents: List<WrappedEvent>, upcomingEven
                 .align(Alignment.Start)
                 .padding(6.dp))
             Divider(Modifier.padding(bottom = 16.dp))
-            EventsListView(list = upcomingEvents, onCheckInClicked = {}, titleLines = 2) {
+            EventsListView(list = upcomingEvents, onCheckInClicked = {_,_ -> }, titleLines = 2) {
                 NoEventsView("You have no upcoming events")
             }
         }

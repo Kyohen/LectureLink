@@ -38,8 +38,9 @@ class NotificationService(private val base: Context?) : ContextWrapper(base) {
 
     fun sendHighPriorityNotification(title: String?, body: String?, activityName: Class<*>) {
         val intent = Intent(base, activityName)
+        val flags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         val pendingIntent =
-            PendingIntent.getActivity(this, 267, intent, PendingIntent.FLAG_UPDATE_CURRENT)
+            PendingIntent.getActivity(this, 267, intent, flags)
         val notification: Notification =
             NotificationCompat.Builder(this, CHANNEL_ID) //
                  .setContentTitle(title)

@@ -25,15 +25,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kh.lecturelink.CheckInState
-import com.kh.lecturelink.Managers.CalEvent
 import com.kh.lecturelink.WrappedEvent
 
 @Composable
-fun EventsListView(list: List<WrappedEvent>, onCheckInClicked: (WrappedEvent) -> Unit, titleLines: Int, defaultView: @Composable () -> Unit) {
+fun EventsListView(list: List<WrappedEvent>, onCheckInClicked: (WrappedEvent, Context) -> Unit, titleLines: Int, defaultView: @Composable () -> Unit) {
     if (list.isEmpty()) {
         defaultView()
     } else {
@@ -65,7 +63,7 @@ fun buttonEnabled(state: CheckInState, inLocation: Boolean): Boolean {
 }
 
 @Composable
-fun EventCardView(event: WrappedEvent, onCheckinClicked: (WrappedEvent) -> Unit, titleLines: Int) {
+fun EventCardView(event: WrappedEvent, onCheckinClicked: (WrappedEvent, Context) -> Unit, titleLines: Int) {
     val ctx = LocalContext.current
     OutlinedCard(elevation = CardDefaults.cardElevation(
         defaultElevation = 6.dp
@@ -89,7 +87,7 @@ fun EventCardView(event: WrappedEvent, onCheckinClicked: (WrappedEvent) -> Unit,
                 if (event.isInLocation) Text("You are at ${event.event.location}", color = Color.Blue) else Text("You are not at ${event.event.location}", color = Color.Red)
             }
             Row(Modifier.align(Alignment.End), verticalAlignment = Alignment.Bottom) {
-                Button(onClick = { onCheckinClicked(event) }, enabled = buttonEnabled(event.checkedIn, event.isInLocation)) {
+                Button(onClick = { onCheckinClicked(event, ctx) }, enabled = buttonEnabled(event.checkedIn, event.isInLocation)) {
                     CheckInButtonLabel(state = event.checkedIn)
                 }
             }

@@ -6,7 +6,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Location
-import android.security.keystore.KeyProperties
 import android.util.Log
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
@@ -26,6 +25,7 @@ import com.kh.lecturelink.Services.GeofenceBroadcastReceiver
 import com.kh.lecturelink.Services.LocationMappingService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted.Companion.Eagerly
@@ -36,31 +36,19 @@ import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Calendar
 import java.util.TimeZone
-import javax.crypto.Cipher
 import kotlin.math.floor
 
-class MainViewModel(
-    private val context: Context,
-    private val calendarManager: CalendarManager,
-    private val locationManager: LocationManaging,
-    private val checkInManager: CheckInManager,
-    private val geoFenceClient: GeofencingClient,
-    private val biometricManager: BiometricManager
-): ViewModel() {
+class MainViewModel : ViewModel() {
     private val events = Channel<Action>()
     private var lastFetch = Calendar.getInstance()
     private var lastRun = System.currentTimeMillis()
 
-    val biometricCallback = object : BiometricPrompt.AuthenticationCallback() {
-        override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-            handleEvent(Action.biometricFailed)
-        }
 
-        override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-            state.value.authState.event?.let { Action.biometricSucceeded(it) }
-                ?.let { handleEvent(it) }
-        }
-    }
+    lateinit var calendarManager: CalendarManager
+    private var locationManager: LocationManaging? = null
+    lateinit var checkInManager: CheckInManager
+    lateinit var geoFenceClient: GeofencingClient
+    lateinit var biometricManager: BiometricManager
 
     val promptInfo = BiometricPrompt.PromptInfo.Builder()
         .setTitle("Biometric login for my app")
@@ -68,12 +56,13 @@ class MainViewModel(
         .setAllowedAuthenticators(BIOMETRIC_STRONG or DEVICE_CREDENTIAL or BIOMETRIC_WEAK)
         .build()
 
-    fun setupGeoFence(context: Context, location: Location, expirary: Long, eventID: String) {
+    private fun setupGeoFence(context: Context, location: Location, expirary: Long, eventID: String) {
             val geofencePendingIntent: PendingIntent by lazy {
                 val intent = Intent(context, GeofenceBroadcastReceiver::class.java)
                 // We use FLAG_UPDATE_CURRENT so that we get the same pending intent back when calling
                 // addGeofences() and removeGeofences().
-                PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT)
+                val flags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                PendingIntent.getBroadcast(context, 0, intent, flags)
             }
 
             val v = Geofence.Builder()
@@ -141,23 +130,27 @@ class MainViewModel(
         }
     }
 
-    var location = viewModelScope.launch {
-        locationManager.locationStateFlow.collect {
-            it?.let { handleEvent(Action.LocationUpdate(it)) }
+    fun setLocation(loc: LocationManaging) {
+        this.locationManager = loc
+        location = viewModelScope.launch {
+            loc.locationStateFlow.collect {
+                it?.let { handleEvent(Action.LocationUpdate(it)) }
+            }
         }
     }
+    private var location: Job? = null
 
     val state = events.receiveAsFlow()
         .runningFold(UiState.defaultUiState(), ::reduceState)
         .stateIn(viewModelScope, Eagerly, UiState.defaultUiState())
 
-    private fun handleEvent(event: Action) {
+    fun handleEvent(event: Action) {
         Log.d("HaandleEventAction", event.toString())
         val r = events.trySend(event)
         Log.d("HandleEventAdded", r.toString())
     }
 
-    fun setupAlarm(){
+    private fun setupAlarm(){
         Log.d("ZZZ", "Setup alarms")
         viewModelScope.launch {
             updateEveryMinuteRoutine()
@@ -167,7 +160,6 @@ class MainViewModel(
     private fun reduceState(currentState: UiState, action: Action): UiState {
         Log.d("HandleEvent", "$action")
         return when (action) {
-            is Action.CheckedInEvent -> TODO()
             is Action.EventsCalculated -> {
                 lastFetch = Calendar.getInstance()
                 pollCurrentEventCheckIn(action.currentEvents)
@@ -205,23 +197,25 @@ class MainViewModel(
             is Action.PasswordCorrectFor -> {
                 val needBio = biometricManager.canAuthenticate(BIOMETRIC_STRONG or BIOMETRIC_WEAK or DEVICE_CREDENTIAL)
                 if (needBio != 0) {
-                    checkIn(action.eventId)
+                    checkIn(action.eventId, action.ctx)
                 }
-                currentState.copy(authState = AuthState(false, false, action.eventId), needBiometric = needBio == 0)
+                currentState.copy(authState = AuthState(needAuth = false, false, action.eventId), needBiometric = needBio == 0)
             }
             is Action.CheckInPressed -> {
                 action.event.password?.let {
-                    currentState.copy(authState = AuthState(true, false, action.event))
+                    currentState.copy(authState = AuthState(needAuth = true, false, action.event))
                 } ?: run {
-                    checkIn(action.event)
+                    checkIn(action.event, action.ctx)
                     currentState
                 }
             }
-            is Action.AuthCancelled -> currentState.copy(authState = AuthState(false, false, null))
+            is Action.AuthCancelled -> currentState.copy(authState = AuthState(needAuth = false, false, null))
             is Action.PasswordIncorrect -> currentState.copy(authState = currentState.authState.copy(authFailed = true))
             is Action.biometricFailed -> currentState
             is Action.biometricSucceeded -> {
-                checkIn(action.event)
+                currentState.authState.event?.let {
+                    checkIn(it, action.ctx)
+                }
                 currentState.copy(authState = currentState.authState.copy(event = null), needBiometric = false)
             }
         }
@@ -240,7 +234,7 @@ class MainViewModel(
                     if (res is CheckInState.CheckedIn && !inArea) {
                         res = checkInManager.checkOut(it.event.id)
                     }
-                    v.add(it.copy(checkedIn = res, isInLocation = inArea))
+                    v.add(it.copy(checkedIn = res, isInLocation = true))
                 } ?: run {
                     v.add(it.copy(checkedIn = res))
                 }
@@ -252,16 +246,17 @@ class MainViewModel(
         }
     }
 
-    fun clearDatabase() {
-        viewModelScope.launch {
-            checkInManager.store.clearStore()
-            pollCurrentEventCheckIn(state.value.currentEvents)
-        }
-    }
-    private fun checkIn(calEvent: WrappedEvent) {
+//    fun clearDatabase() {
+//        viewModelScope.launch {
+//            checkInManager.store.clearStore()
+//            pollCurrentEventCheckIn(state.value.currentEvents)
+//        }
+//    }
+    private fun checkIn(calEvent: WrappedEvent, context: Context) {
         //TODO: Authenticate User, check-in with server (or local) using auth details
+        val timeToLast = calEvent.event.endTime - Calendar.getInstance().timeInMillis
         calEvent.location?.let {
-            setupGeoFence(context, it, 1000*60*15, calEvent.event.id.toString())
+            setupGeoFence(context, it, timeToLast, calEvent.event.id.toString())
         }
         CoroutineScope(Dispatchers.IO).launch {
             val res = checkInManager.checkIn(calEvent.event.id)
@@ -271,8 +266,8 @@ class MainViewModel(
         }
     }
 
-    fun checkInPressed(calEvent: WrappedEvent) {
-        handleEvent(Action.CheckInPressed(calEvent))
+    fun checkInPressed(calEvent: WrappedEvent, context: Context) {
+        handleEvent(Action.CheckInPressed(calEvent, context))
     }
 
     fun onResume() {
@@ -296,10 +291,6 @@ class MainViewModel(
             c.set(Calendar.SECOND, 0)
 
             val currentTime = Calendar.getInstance()
-            currentTime.add(Calendar.DATE, 0)
-            currentTime.set(Calendar.HOUR_OF_DAY, 12)
-            currentTime.set(Calendar.MINUTE, 0)
-            currentTime.set(Calendar.SECOND, 0)
             currentTime.timeZone = TimeZone.getTimeZone("UTC")
 //            Log.e("ZZZ", DateFormat.getTimeInstance(DateFormat.LONG).format(currentTime.timeInMillis))
 //            Log.e("ZZZ", DateFormat.getDateInstance(DateFormat.LONG).format(currentTime.timeInMillis))
@@ -333,12 +324,12 @@ class MainViewModel(
     private fun isAtLocationOfEvent(event: WrappedEvent, location: Location): Boolean {
         return event.location?.let { loc -> location.distanceTo(loc) < LOCATION_RADIUS } ?: false
     }
-    fun startLocations() = locationManager.StartContinousServices()
+    fun startLocations() = locationManager?.StartContinousServices()
 
-    fun passwordSubmit(password: String, calEvent: WrappedEvent) {
+    fun passwordSubmit(password: String, calEvent: WrappedEvent, context: Context) {
         calEvent.password?.let {
             if (password == it)
-                handleEvent(Action.PasswordCorrectFor(calEvent))
+                handleEvent(Action.PasswordCorrectFor(calEvent, context))
             else
                 handleEvent(Action.PasswordIncorrect)
         }
@@ -351,5 +342,15 @@ class MainViewModel(
     companion object {
         const val LOCATION_RADIUS = 100
         val timeFormatter: DateFormat = DateFormat.getTimeInstance(DateFormat.SHORT)
+    }
+}
+class BiometricCallBack(val context: Context, val handleEvent: (Action) -> Unit) : BiometricPrompt.AuthenticationCallback() {
+    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+        handleEvent(Action.biometricFailed)
+    }
+
+    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+//        state.value.authState.event?.let { Action.biometricSucceeded(it) }
+        handleEvent(Action.biometricSucceeded(context))
     }
 }
