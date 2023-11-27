@@ -8,20 +8,22 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
+
 enum class LocationPerm {
     GRANTED,
     DENIED
 }
-interface LocationManaging {
+interface LocationManaging: LocationListener {
     var locationStateFlow: StateFlow<Location?>
     fun getCurrentLocation(): Location?
     fun getCurrentPermissions(): LocationPerm
     fun askPermission(withCallback: (LocationPerm) -> Unit)
     fun StartContinousServices()
+    fun singleRequestPls()
     var servicesStarted: Boolean
 }
 
-class AppLocationManager(private val client: LocationManager) : LocationManaging, LocationListener {
+class AppLocationManager(private val client: LocationManager) : LocationManaging {
     private var _locationStateFlow = MutableStateFlow<Location?>(null)
     override var locationStateFlow: StateFlow<Location?> = _locationStateFlow.asStateFlow()
     override var servicesStarted: Boolean = false
@@ -41,10 +43,19 @@ class AppLocationManager(private val client: LocationManager) : LocationManaging
         TODO("Not yet implemented")
     }
 
+    override fun singleRequestPls(){
+        Log.d("ZZZ", client.allProviders.toString())
+        try {
+            client.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 50f, this)
+            servicesStarted = true
+        } catch (e: SecurityException) {
+            Log.e("LocationManager", "Tried to access without permission")
+        }
+    }
     override fun StartContinousServices() {
         Log.d("ZZZ", client.allProviders.toString())
         try {
-            client.requestLocationUpdates(LocationManager.FUSED_PROVIDER, 1000L, 50f, this)
+            client.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 50f, this)
             servicesStarted = true
         } catch (e: SecurityException) {
             Log.e("LocationManager", "Tried to access without permission")

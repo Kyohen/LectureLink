@@ -7,10 +7,9 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
-import androidx.activity.ComponentActivity
+import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
-import androidx.appcompat.app.AppCompatActivity
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.compose.animation.AnimatedVisibility
@@ -35,6 +34,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
@@ -43,6 +44,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -55,29 +57,23 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.ViewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionState
 import com.google.accompanist.permissions.PermissionStatus
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.accompanist.permissions.shouldShowRationale
-import com.google.android.gms.location.GeofencingClient
 import com.google.android.gms.location.LocationServices
 import com.kh.lecturelink.BiometricCallBack
 import com.kh.lecturelink.MainViewModel
 import com.kh.lecturelink.Managers.AppLocationManager
 import com.kh.lecturelink.Managers.CalendarManager
 import com.kh.lecturelink.Managers.CheckInManager
-import com.kh.lecturelink.Managers.LocationManaging
 import com.kh.lecturelink.WrappedEvent
 import com.kh.lecturelink.ui.theme.LectureLinkTheme
-import java.security.Key
-import javax.crypto.Cipher
-import javax.crypto.SecretKey
 
 class MainActivity : FragmentActivity() {
     private lateinit var service: LocationManager
-    val viewModel: MainViewModel by viewModels()
+    private val viewModel: MainViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -86,7 +82,7 @@ class MainActivity : FragmentActivity() {
         val calendarManager = CalendarManager(contentResolver)
         val geoFenceClient = LocationServices.getGeofencingClient(this)
 
-        viewModel.setLocation(locManager)
+        viewModel.locationManager = locManager
         viewModel.calendarManager = calendarManager
         viewModel.geoFenceClient = geoFenceClient
         viewModel.checkInManager = CheckInManager(applicationContext)
@@ -122,8 +118,15 @@ fun RootView(viewModel: MainViewModel) {
         }
     }
 
+    val ctx = LocalContext.current
+
     LaunchedEffect("Key") {
         locPermState.launchPermissionRequest()
+        try {
+            Class.forName("com.google.android.gms.location.LocationServices")
+        } catch (e: Exception) {
+            Toast.makeText(ctx, "No Google Apis detected", Toast.LENGTH_SHORT).show()
+        }
     }
 
     if(locPermState.status != PermissionStatus.Granted || calPermState.status != PermissionStatus.Granted) {
@@ -133,6 +136,29 @@ fun RootView(viewModel: MainViewModel) {
     }
     AnimatedVisibility(visible = state.value.currentLocation?.latitude == null) {
         LoadingView("Fetching Location")
+    }
+}
+
+@Composable
+fun TabScreen(initialState: Int, mainViewModel: MainViewModel) {
+    var tabIndex by remember { mutableIntStateOf(initialState) }
+
+    val tabs = listOf("Home", "History", "Settings")
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        TabRow(selectedTabIndex = tabIndex) {
+            tabs.forEachIndexed { index, title ->
+                Tab(text = { Text(title) },
+                    selected = tabIndex == index,
+                    onClick = { tabIndex = index }
+                )
+            }
+        }
+        when (tabIndex) {
+            0 -> MainScreenView(viewModel = mainViewModel)
+            1 -> Text("History")
+            2 -> Text("Settings")
+        }
     }
 }
 

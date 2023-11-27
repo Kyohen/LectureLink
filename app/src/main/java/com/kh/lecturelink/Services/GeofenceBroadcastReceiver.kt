@@ -1,18 +1,14 @@
 package com.kh.lecturelink.Services
 
-import android.app.IntentService
-import android.app.Service
 import android.content.BroadcastReceiver
-import android.content.ContentValues.TAG
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
-import android.os.IBinder
 import android.util.Log
 import android.widget.Toast
 import com.google.android.gms.location.Geofence
 import com.google.android.gms.location.GeofenceStatusCodes
 import com.google.android.gms.location.GeofencingEvent
+import com.google.android.gms.location.LocationServices
 import com.kh.lecturelink.Managers.CheckInManager
 import com.kh.lecturelink.ui.views.MainActivity
 import kotlinx.coroutines.DelicateCoroutinesApi
@@ -23,24 +19,27 @@ import kotlin.coroutines.EmptyCoroutineContext
 class GeofenceBroadcastReceiver : BroadcastReceiver() {
     private val TAG = "GEO_BORADCAST"
     @OptIn(DelicateCoroutinesApi::class)
-    override fun onReceive(context: Context?, intent: Intent?) {
-        val geofencingEvent = intent?.let { GeofencingEvent.fromIntent(it) }
+    override fun onReceive(context: Context?, intent: Intent) {
+        val geofencingEvent = GeofencingEvent.fromIntent(intent)
         val checkInManager = CheckInManager(context!!)
 
         val n = NotificationService(context)
+        if (geofencingEvent == null) {
+            Log.e(TAG, "geofencing event was null")
+            return
+        }
 
-        if (geofencingEvent != null) {
-            if (geofencingEvent.hasError()) {
-                val errorMessage = GeofenceStatusCodes
-                    .getStatusCodeString(geofencingEvent.errorCode)
-                Log.e(TAG, errorMessage)
-                return
-            }
+        if (geofencingEvent.hasError()) {
+            val errorMessage = GeofenceStatusCodes
+                .getStatusCodeString(geofencingEvent.errorCode)
+            Log.e(TAG, errorMessage)
+            Log.e(TAG, "Ran into an error")
+            return
         }
 
         // Get the transition type.
         val geofenceTransition = geofencingEvent?.geofenceTransition
-
+        Log.e(TAG, "Event: $geofencingEvent")
         // Test that the reported transition was of interest.
         if (geofenceTransition == Geofence.GEOFENCE_TRANSITION_EXIT) {
 
@@ -54,13 +53,16 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
             n.sendHighPriorityNotification("You have left", "Go back to your lectures", MainActivity::class.java)
             Log.i(TAG, geofenceTransition.toString() + " " + triggeringGeofences.toString())
             val f = triggeringGeofences!!.first()
+
+            val geoFenceClient = LocationServices.getGeofencingClient(context)
+            geoFenceClient.removeGeofences(listOf(f.requestId))
             GlobalScope.launch(EmptyCoroutineContext) {
                 checkInManager.checkOut(f.requestId.toLong())
                 Log.e("ZZZ", "Checked out event")
             }
         } else {
             // Log the error.
-            Log.e(TAG, "Error")
+            Log.e(TAG, "Error, was ${geofenceTransition.toString()}")
         }
     }
 
